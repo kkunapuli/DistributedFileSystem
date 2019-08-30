@@ -4,7 +4,6 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,11 +17,6 @@ public class NameNode {
 	final static Object mapLock = new Object(); //for locking hashmap
 
 	private ServerSocket serverSocket;
-	private Socket clientSocket;
-	private PrintWriter out;
-	private BufferedReader in;
-
-
 	public static void main(String[] args) {
 		NameNode server = new NameNode();
 		server.start(5558);
@@ -93,7 +87,7 @@ public class NameNode {
 
 		// ---- START section that actually implements the name node handler ----- //
 		public NameNodeHandler(Socket socket) {
-			this.clientSocket = socket;
+			NameNodeHandler.clientSocket = socket;
 		}
 
 		public void run() {
@@ -166,7 +160,6 @@ public class NameNode {
 
 
 			String returnID = null;//BlockID, given from DataNode when send Alloc
-			String success = null;//Given from DateNode when send Write + BlockID + content
 			List<Pair> list = new ArrayList<Pair>();//add blockID into pair for hashmap
 			int NumBlocksReceived = 0;//number of blocks alloc
 			int DNDirector = 0;//DataNodeDirector, a Round Robin algorithm to select which DataNode to talk to
@@ -196,7 +189,6 @@ public class NameNode {
 						System.out.println("DataNode is : "+ pair.getdataNode());
 						System.out.println("BlockID is : "+ pair.getblockNode());
 						ctoD.startConnection("127.0.0.1", 65530);
-						success = ctoD.sendMessage(msg);
 						ctoD.stopConnection();
 						NumBlocksReceived++;
 					}
@@ -215,7 +207,6 @@ public class NameNode {
 						Pair pair = new Pair("D2",Integer.parseInt(returnID));
 						list.add(pair);
 						ctoD.startConnection("127.0.0.1", 65531);
-						success = ctoD.sendMessage("Write "+returnID+ " "+ subString.get(NumBlocksReceived));
 						ctoD.stopConnection();
 						NumBlocksReceived++;
 					}
@@ -234,7 +225,6 @@ public class NameNode {
 						Pair pair = new Pair("D3",Integer.parseInt(returnID));
 						list.add(pair);
 						ctoD.startConnection("127.0.0.1", 65532);
-						success = ctoD.sendMessage("Write "+returnID+ " "+ subString.get(NumBlocksReceived));
 						ctoD.stopConnection();
 						NumBlocksReceived++;
 					}
