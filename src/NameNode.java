@@ -4,6 +4,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,11 +14,18 @@ public class NameNode {
 	final static int MB = 4194304;//String cut in 4MB
 	//hashmap that stores the filename and DNum+BNum
 	static Map<String, List<Pair>> map=new HashMap<String, List<Pair>>(); 
-	//keep shared resources safe
-	final static Object mapLock = new Object(); //for locking hashmap
+	//ArrayList that contain all the substring of contents
 
 	private ServerSocket serverSocket;
+	private Socket clientSocket;
+	private PrintWriter out;
+	private BufferedReader in;
+	//mutex
+	//private final Object mutex = new Object();
+
+
 	public static void main(String[] args) {
+		//Append("First.txt","Hello!"); //Append only when it does not exist, otherwise deny it
 		NameNode server = new NameNode();
 		server.start(5558);
 	}
@@ -87,7 +95,7 @@ public class NameNode {
 
 		// ---- START section that actually implements the name node handler ----- //
 		public NameNodeHandler(Socket socket) {
-			NameNodeHandler.clientSocket = socket;
+			this.clientSocket = socket;
 		}
 
 		public void run() {
@@ -111,6 +119,8 @@ public class NameNode {
 						file = tokens[1];
 						
 						Read(file);
+						//FIXME is this ok?
+						break;
 					}
 					else if(tokens[0].toLowerCase().equals("append") && tokens.length >= 3) {
 						file = tokens[1];
@@ -139,47 +149,56 @@ public class NameNode {
 		//---------   The following are the "NameNode" functions ----------- //
 		public static void Append(String filename, String content) //filename ends in txt, content is one big string
 		{	
-			int blockNum = 0;//Number of blocks needed
-			List<String> subString = new ArrayList<String>(); //break down strings and store in List of String 
-			if(content.length()*2>MB) {//if the length of content(length*2) is greater then 4MB
+			int blockNum = 0;
+			List<String> subString = new ArrayList<String>(); //break down strings
+			System.out.println("Content: " + content);
+			if(content.length()*2>MB) {
 				blockNum = MB/content.length()+1; 
 			}
 			else {
 				blockNum = 1;
 			}
+			System.out.println("First BlockNum: " + blockNum);
 
-			for(int i = 0; i < blockNum; i++)//cut string by 4MB and add to the string list
+			for(int i = 0; i < blockNum; i++)//cut string by by
 			{
 				int idx1 = i*MB;
 				int idx2 = (i+1)*MB;
 				if(idx2 > content.length()) {
 					idx2 = content.length();
-				}				
+				}
+				System.out.println("idx1=" + idx1 + " idx2=" + idx2);
+				
 				subString.add(content.substring(idx1, idx2));
+				System.out.println("Substring in Append: " + subString.get(i));
 			}
 
 
-			String returnID = null;//BlockID, given from DataNode when send Alloc
-			List<Pair> list = new ArrayList<Pair>();//add blockID into pair for hashmap
-			int NumBlocksReceived = 0;//number of blocks alloc
-			int DNDirector = 0;//DataNodeDirector, a Round Robin algorithm to select which DataNode to talk to
+			String returnID = null; //the message giving back
+			String success = null;
+			List<Pair> list = new ArrayList<Pair>();
+			int NumBlocksReceived = 0;
+			int DNDirector = 0;
 			System.out.println("BlockNum: " + blockNum);
 			while(NumBlocksReceived < blockNum)
 			{
 				///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 				//reqest send to DN1, DN2, DN3
 				//talk to DNDirect%3(th) DataNode
-				//EX: 5 blockNum, request to DN1,DN2,DN3,DN1,DN2				
+				//EX: 5 blockNum, request to DN1,DN2,DN3,DN1,DN2
+				//if a freeblock is given back, set gotit to true
+				System.out.println("DNDirector="+DNDirector);
+				
 				
 				if(DNDirector%3 == 0)
 				{
 					ctoD.startConnection("127.0.0.1", 65530); //Instantiate DataNode 1
-					returnID = ctoD.sendMessage("Alloc");//sending message
+					returnID = ctoD.sendMessage("Alloc");
 					ctoD.stopConnection();
 					System.out.println("Received: " + returnID);
 					System.out.println("Sent message Alloc to 1");
-					//if the request is denied(sending back "-1"), move to next datanode
-					if(returnID.equals("-1")){DNDirector++;}
+					if(returnID.equals("-1")) 
+					{DNDirector++;}//-1 ,parse it to int 
 					else
 					{
 						Pair pair = new Pair("D1",Integer.parseInt(returnID));
@@ -189,6 +208,7 @@ public class NameNode {
 						System.out.println("DataNode is : "+ pair.getdataNode());
 						System.out.println("BlockID is : "+ pair.getblockNode());
 						ctoD.startConnection("127.0.0.1", 65530);
+						success = ctoD.sendMessage(msg);
 						ctoD.stopConnection();
 						NumBlocksReceived++;
 					}
@@ -201,12 +221,14 @@ public class NameNode {
 					System.out.println("Received: " + returnID);
 
 					System.out.println("Sent message Alloc to 2");
-					if(returnID.equals("-1")) {DNDirector++;}
+					if(returnID.equals("-1")) 
+					{DNDirector++;}//-1 ,parse it to int 
 					else
 					{
 						Pair pair = new Pair("D2",Integer.parseInt(returnID));
 						list.add(pair);
 						ctoD.startConnection("127.0.0.1", 65531);
+						success = ctoD.sendMessage("Write "+returnID+ " "+ subString.get(NumBlocksReceived));
 						ctoD.stopConnection();
 						NumBlocksReceived++;
 					}
@@ -219,27 +241,25 @@ public class NameNode {
 					System.out.println("Received: " + returnID);
 
 					System.out.println("Sent message Alloc to 3");
-					if(returnID.equals("-1")) {DNDirector++;}
+					if(returnID.equals("-1")) 
+					{DNDirector++;}//-1 ,parse it to int 
 					else
 					{
 						Pair pair = new Pair("D3",Integer.parseInt(returnID));
 						list.add(pair);
 						ctoD.startConnection("127.0.0.1", 65532);
+						success = ctoD.sendMessage("Write "+returnID+ " "+ subString.get(NumBlocksReceived));
 						ctoD.stopConnection();
 						NumBlocksReceived++;
 					}
 				}
 
 			}
-			
-			//ensure only one thread edits hashmap at a time
-			synchronized(mapLock) {
-				if(map.containsKey(filename)){
-					map.get(filename).addAll(list);
-				}
-				else {
-					map.put(filename, list);//saves in the hash table
-				}
+			if(map.containsKey(filename)){
+				map.get(filename).addAll(list);
+			}
+			else {
+			map.put(filename, list);//saves in the hash table
 			}
 			List<Pair> test = map.get(filename);
 			for(int i = 0; i < test.size(); i++) {
@@ -251,15 +271,16 @@ public class NameNode {
 
 		public static void Read(String filename)
 		{
-			String content = null;//variable giving back from block
-			List<Pair> temp = new ArrayList<Pair>();//get the list of DN and blockID from the table
+			String content = null;
+			List<Pair> temp = new ArrayList<Pair>();
 			List<String> conCat = new ArrayList<String>(); //concatenate strings
 
 			if(map.containsKey(filename))//if the file is found
 			{
 				temp = map.get(filename);	
-				for(int j = 0; j < temp.size(); j++)
+				for(int j = 0; j < temp.size(); j++)//add mutex to this???
 				{
+					//File infile =new File(arr[index][j]);
 					temp.get(j).getdataNode();
 					//send a message to the specific data node
 					//give back the centent of block note
@@ -290,7 +311,8 @@ public class NameNode {
 				System.out.println("Output: " + joined);
 				output(joined);
 
-			}else{System.out.println("The file does not exist.");
+			}else{
+				System.out.println("The file does not exist.");
 			}
 			System.out.println("Called Read within the handler");
 		}
