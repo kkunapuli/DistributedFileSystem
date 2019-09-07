@@ -109,7 +109,6 @@ public class NameNode {
 					if (".".equals(inputLine)) {		//if a dot is sent, close everything
 						break;
 					}
-					System.out.println("InputLine: " + inputLine);
 					ctoD = new NameNodeHandlerClient();	//Create the client that will be used repeatedly to communicate with datanodes 
 					
 					//---Parse String, Call Read or Append --//
@@ -119,21 +118,19 @@ public class NameNode {
 						file = tokens[1];
 						
 						Read(file);
-						//FIXME is this ok?
+						//once we've finished reading, we're done
 						break;
 					}
 					else if(tokens[0].toLowerCase().equals("append") && tokens.length >= 3) {
 						file = tokens[1];
-						System.out.println("file name in NameNode: " + inputLine);
 						String[] contents = inputLine.split(" ", 3);
-						System.out.println("contents in NameNode: " + contents[2]);
 						String cont = contents[2];				//gets the contents of the string including spaces
 
 						Append(file,cont);
 					}
 					else
 					{
-						System.out.println("Failed to parse string in NameNode");
+						System.out.println("Name Node ERROR: Failed to parse string in NameNode");
 					}
 					out.println(inputLine);
 				}//END while loop, close connection
@@ -151,14 +148,12 @@ public class NameNode {
 		{	
 			int blockNum = 0;
 			List<String> subString = new ArrayList<String>(); //break down strings
-			System.out.println("Content: " + content);
 			if(content.length()*2>MB) {
 				blockNum = MB/content.length()+1; 
 			}
 			else {
 				blockNum = 1;
 			}
-			System.out.println("First BlockNum: " + blockNum);
 
 			for(int i = 0; i < blockNum; i++)//cut string by by
 			{
@@ -167,10 +162,8 @@ public class NameNode {
 				if(idx2 > content.length()) {
 					idx2 = content.length();
 				}
-				System.out.println("idx1=" + idx1 + " idx2=" + idx2);
 				
 				subString.add(content.substring(idx1, idx2));
-				System.out.println("Substring in Append: " + subString.get(i));
 			}
 
 
@@ -179,7 +172,6 @@ public class NameNode {
 			List<Pair> list = new ArrayList<Pair>();
 			int NumBlocksReceived = 0;
 			int DNDirector = 0;
-			System.out.println("BlockNum: " + blockNum);
 			while(NumBlocksReceived < blockNum)
 			{
 				///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,7 +179,6 @@ public class NameNode {
 				//talk to DNDirect%3(th) DataNode
 				//EX: 5 blockNum, request to DN1,DN2,DN3,DN1,DN2
 				//if a freeblock is given back, set gotit to true
-				System.out.println("DNDirector="+DNDirector);
 				
 				
 				if(DNDirector%3 == 0)
@@ -195,8 +186,6 @@ public class NameNode {
 					ctoD.startConnection("127.0.0.1", 65530); //Instantiate DataNode 1
 					returnID = ctoD.sendMessage("Alloc");
 					ctoD.stopConnection();
-					System.out.println("Received: " + returnID);
-					System.out.println("Sent message Alloc to 1");
 					if(returnID.equals("-1")) 
 					{DNDirector++;}//-1 ,parse it to int 
 					else
@@ -204,9 +193,6 @@ public class NameNode {
 						Pair pair = new Pair("D1",Integer.parseInt(returnID));
 						list.add(pair);
 						String msg = "Write "+returnID+ " "+ subString.get(NumBlocksReceived);
-						System.out.println("Msg: " + msg);
-						System.out.println("DataNode is : "+ pair.getdataNode());
-						System.out.println("BlockID is : "+ pair.getblockNode());
 						ctoD.startConnection("127.0.0.1", 65530);
 						success = ctoD.sendMessage(msg);
 						ctoD.stopConnection();
@@ -218,9 +204,7 @@ public class NameNode {
 					ctoD.startConnection("127.0.0.1", 65531);
 					returnID = ctoD.sendMessage("Alloc");
 					ctoD.stopConnection();
-					System.out.println("Received: " + returnID);
 
-					System.out.println("Sent message Alloc to 2");
 					if(returnID.equals("-1")) 
 					{DNDirector++;}//-1 ,parse it to int 
 					else
@@ -238,9 +222,7 @@ public class NameNode {
 					ctoD.startConnection("127.0.0.1", 65532);
 					returnID = ctoD.sendMessage("Alloc");
 					ctoD.stopConnection();
-					System.out.println("Received: " + returnID);
 
-					System.out.println("Sent message Alloc to 3");
 					if(returnID.equals("-1")) 
 					{DNDirector++;}//-1 ,parse it to int 
 					else
@@ -262,10 +244,6 @@ public class NameNode {
 			map.put(filename, list);//saves in the hash table
 			}
 			List<Pair> test = map.get(filename);
-			for(int i = 0; i < test.size(); i++) {
-				System.out.println("DataNode: " + test.get(i).getdataNode() + " block:" + test.get(i).getblockNode());
-			}
-			System.out.println("Called append within the handler");
 		}
 
 
@@ -308,13 +286,11 @@ public class NameNode {
 				}
 				String joined = String.join(" ", conCat); //conCat is a string list
 				//joined is send back to client
-				System.out.println("Output: " + joined);
 				output(joined);
 
 			}else{
-				System.out.println("The file does not exist.");
+				System.out.println("Name Node ERROR: The file does not exist.");
 			}
-			System.out.println("Called Read within the handler");
 		}
 		private static void output(String out) {
 			try {
